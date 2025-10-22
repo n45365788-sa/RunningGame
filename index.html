@@ -1,0 +1,263 @@
+<!doctype html>
+
+<html lang="ar">
+
+<head>
+
+<meta charset="utf-8">
+
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+
+<title>لعبة الركض المتقدمة</title>
+
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+
+<style>
+
+html,body { height:100%; margin:0; background:#fff; }
+
+#game-container { width:100%; height:100vh; overflow:hidden; position: relative;}
+
+#restartBtn {
+
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+
+  padding:12px 20px; font-size:20px; background:#00aaff; color:#fff;
+
+  border:none; border-radius:8px; cursor:pointer; display:none; z-index:1000;
+
+}
+
+#hint { position:absolute; left:12px; top:12px; color:#000; font-family:system-ui,"Segoe UI",sans-serif; z-index:1000; text-shadow:0 1px 0 #fff; }
+
+</style>
+
+</head>
+
+<body>
+
+<div id="game-container"></div>
+
+<button id="restartBtn">إعادة اللعب</button>
+
+<div id="hint">اضغط للقفز</div>
+
+<script>
+
+const GAME_WIDTH = 900;
+
+const GAME_HEIGHT = 450;
+
+const groundHeight = 20;
+
+let baseSpeed = 200;
+
+const jumpVelocity = -1000; // قفزة ثابتة جدًا
+
+const config = {
+
+  type: Phaser.AUTO,
+
+  parent: 'game-container',
+
+  width: GAME_WIDTH,
+
+  height: GAME_HEIGHT,
+
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+
+  physics: { default: 'arcade', arcade: { gravity: { y: 1400 }, debug: false } },
+
+  scene: { preload, create, update }
+
+};
+
+let game = new Phaser.Game(config);
+
+let playerBody, playerHead;
+
+let obstacles = [];
+
+let distance = 0, gameOver = false, elapsedAcc = 0;
+
+let scoreText, highScoreText, restartText;
+
+let highScore = 0;
+
+function preload(){}
+
+function create(){
+
+  initGame.call(this);
+
+  document.getElementById('restartBtn').onclick = ()=>{
+
+    document.getElementById('restartBtn').style.display='none';
+
+    initGame.call(this);
+
+  };
+
+  setTimeout(()=>document.getElementById('hint').style.display='none',2000);
+
+}
+
+function initGame(){
+
+  this.children.removeAll();
+
+  this.physics.world.colliders.destroy();
+
+  distance = 0; elapsedAcc = 0; gameOver = false;
+
+  obstacles = [];
+
+  this.cameras.main.setBackgroundColor(0xffffff);
+
+  let ground = this.add.tileSprite(GAME_WIDTH/2,GAME_HEIGHT-groundHeight/2,GAME_WIDTH,groundHeight,null);
+
+  this.physics.add.existing(ground,true);
+
+  let xPos = 120;
+
+  let yBase = GAME_HEIGHT - groundHeight;
+
+  // الجسم الأخضر مع فيزياء
+
+  playerBody = this.add.rectangle(xPos, yBase - 20, 20, 40, 0x00ff00);
+
+  this.physics.add.existing(playerBody);
+
+  playerBody.body.setCollideWorldBounds(true);
+
+  playerBody.body.setGravityY(1400);
+
+  // الرأس الأزرق يتبع الجسم
+
+  playerHead = this.add.rectangle(xPos, yBase - 50, 20, 20, 0x0000ff);
+
+  scoreText = this.add.text(16,16,'المسافة: 0 م',{font:'22px system-ui',fill:'#000'});
+
+  highScoreText = this.add.text(GAME_WIDTH-16,16,'أعلى نتيجة: '+highScore+' م',{font:'22px system-ui',fill:'#ff5500'}).setOrigin(1,0);
+
+  restartText = this.add.text(GAME_WIDTH/2,GAME_HEIGHT/2,'',{font:'26px system-ui',fill:'#ff0000',align:'center'}).setOrigin(0.5).setVisible(false);
+
+  this.input.on('pointerdown',()=>{
+
+    if(gameOver) return;
+
+    if(playerBody.body.blocked.down){
+
+      playerBody.body.setVelocityY(jumpVelocity);
+
+    }
+
+  });
+
+  addObstacleWithGap(this, GAME_WIDTH + 100);
+
+}
+
+// وظيفة لإنشاء العقبات مع مسافة مناسبة
+
+function addObstacleWithGap(scene, startX){
+
+  let count = Phaser.Math.Between(1,2); // 1 أو 2 عقبة فقط
+
+  let x = startX;
+
+  for(let i=0;i<count;i++){
+
+    let height = Phaser.Math.Between(30,60);
+
+    let obs = scene.add.rectangle(x, GAME_HEIGHT - 20 - height/2, 20, height, 0xff0000);
+
+    scene.physics.add.existing(obs,true);
+
+    obstacles.push(obs);
+
+    let gap = Phaser.Math.Between(250,350); // مسافة مناسبة للقفز
+
+    x += gap;
+
+  }
+
+}
+
+function update(time, delta){
+
+  if(gameOver) return;
+
+  elapsedAcc += delta;
+
+  distance = Math.floor(elapsedAcc/50);
+
+  scoreText.setText('المسافة: '+distance+' م');
+
+  if(distance>highScore){ highScore=distance; highScoreText.setText('أعلى نتيجة: '+highScore+' م'); }
+
+  let speedBoost = Math.floor(distance/300);
+
+  let obstacleSpeed = baseSpeed + speedBoost*30;
+
+  if(Math.floor(distance/700)%2 === 1){
+
+    this.cameras.main.setBackgroundColor(0x000000);
+
+  }else{
+
+    this.cameras.main.setBackgroundColor(0xffffff);
+
+  }
+
+  playerHead.x = playerBody.x;
+
+  playerHead.y = playerBody.y - 30;
+
+  obstacles.forEach((obs,index)=>{
+
+    obs.x -= obstacleSpeed * delta/1000;
+
+    if(Phaser.Geom.Intersects.RectangleToRectangle(playerBody.getBounds(), obs.getBounds())){
+
+      endGame(this);
+
+    }
+
+    if(obs.x + obs.width/2 < 0){
+
+      obs.destroy();
+
+      obstacles.splice(index,1);
+
+    }
+
+  });
+
+  // إنشاء عقبات جديدة إذا العدد أقل من المطلوب مع مسافة مناسبة
+
+  while(obstacles.length < 3){
+
+    addObstacleWithGap(this, GAME_WIDTH + Phaser.Math.Between(100,300));
+
+  }
+
+}
+
+function endGame(scene){
+
+  gameOver=true;
+
+  restartText.setText('انتهت اللعبة!\nالمسافة: '+distance+' م');
+
+  restartText.setVisible(true);
+
+  document.getElementById('restartBtn').style.display='block';
+
+}
+
+</script>
+
+</body>
+
+</html>
